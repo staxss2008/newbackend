@@ -4,13 +4,10 @@ server:
     context-path: /api
 
 spring:
-  application:
-    name: dispatch-management-system
-
   datasource:
-    url: ${DATABASE_URL}
-    username: ${MYSQLUSER}
-    password: ${MYSQLPASSWORD}
+    url: jdbc:mysql://${MYSQLHOST:mysql.railway.internal}:${MYSQLPORT:3306}/${MYSQLDATABASE:railway}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQLUSER:root}
+    password: ${MYSQLPASSWORD:TqyUFxrhLFlPDkrHTIYJPVKgLBIaxtYV}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       minimum-idle: 5
