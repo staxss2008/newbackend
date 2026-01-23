@@ -9,6 +9,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @MapperScan("com.dispatch.system.mapper")
+@EnableAutoConfiguration(exclude = {
+    org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration.class
+})
 public class DispatchApplication {
     public static void main(String[] args) {
         SpringApplication.run(DispatchApplication.class, args);

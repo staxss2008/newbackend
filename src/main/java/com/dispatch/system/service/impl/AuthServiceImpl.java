@@ -68,7 +68,8 @@ public class AuthServiceImpl implements AuthService {
             System.out.println("Token已成功存储到Redis");
         } catch (Exception e) {
             System.out.println("Redis存储失败: " + e.getMessage());
-            e.printStackTrace();
+            // Redis 禁用时忽略错误
+            System.out.println("Redis已禁用，跳过存储");
         }
 
         return Result.success("登录成功", token);
@@ -77,8 +78,14 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void logout(String token) {
         // 从Redis中删除令牌
-        String redisKey = TOKEN_PREFIX + token;
-        redisTemplate.delete(redisKey);
+        try {
+            String redisKey = TOKEN_PREFIX + token;
+            redisTemplate.delete(redisKey);
+            System.out.println("Token已从Redis删除");
+        } catch (Exception e) {
+            // Redis 禁用时忽略错误
+            System.out.println("Redis已禁用，跳过删除");
+        }
     }
 
     @Override
@@ -87,8 +94,15 @@ public class AuthServiceImpl implements AuthService {
         String redisKey = TOKEN_PREFIX + token;
         System.out.println("尝试从Redis获取用户信息, Key: " + redisKey);
 
-        SysUser user = (SysUser) redisTemplate.opsForValue().get(redisKey);
-        System.out.println("Redis查询结果: " + (user != null ? "找到用户" : "未找到用户"));
+        SysUser user = null;
+        try {
+            user = (SysUser) redisTemplate.opsForValue().get(redisKey);
+            System.out.println("Redis查询结果: " + (user != null ? "找到用户" : "未找到用户"));
+        } catch (Exception e) {
+            // Redis 禁用时忽略错误
+            System.out.println("Redis已禁用，跳过查询");
+            user = null;
+        }
 
         if (user == null) {
             // 如果Redis中没有,尝试从令牌中解析
@@ -106,8 +120,8 @@ public class AuthServiceImpl implements AuthService {
                         redisTemplate.opsForValue().set(redisKey, user, TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
                         System.out.println("用户信息已重新存储到Redis");
                     } catch (Exception e) {
-                        System.out.println("Redis存储失败: " + e.getMessage());
-                        e.printStackTrace();
+                        // Redis 禁用时忽略错误
+                        System.out.println("Redis已禁用，跳过存储");
                     }
                 }
             }
