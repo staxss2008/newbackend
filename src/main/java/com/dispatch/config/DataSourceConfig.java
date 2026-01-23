@@ -1,6 +1,8 @@
 package com.dispatch.config;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.context.annotation.Bean;
@@ -14,6 +16,7 @@ import javax.sql.DataSource;
  * 使用 Railway 提供的 MYSQL_PUBLIC_URL 环境变量
  */
 @Configuration
+@EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class})
 public class DataSourceConfig {
 
     @Bean
