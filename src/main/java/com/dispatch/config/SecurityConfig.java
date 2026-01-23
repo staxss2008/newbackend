@@ -49,7 +49,7 @@ public class SecurityConfig {
             // 配置请求授权
             .authorizeHttpRequests()
             // 登录接口和密码重置接口允许匿名访问
-            .antMatchers("/api/auth/login", "/auth/login", "/api/auth/user-info", "/auth/user-info", 
+            .requestMatchers("/api/auth/login", "/auth/login", "/api/auth/user-info", "/auth/user-info", 
                         "/api/auth/reset-driver-password", "/auth/reset-driver-password").permitAll()
             // 其他所有请求都需要认证
             .anyRequest().authenticated()
