@@ -6,7 +6,7 @@ import com.dispatch.system.entity.SysUser;
 import com.dispatch.system.mapper.SysUserMapper;
 import com.dispatch.system.service.AuthService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
+
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -26,9 +26,6 @@ public class AuthServiceImpl implements AuthService {
 
     @Autowired
     private JwtUtil jwtUtil;
-
-    @Autowired(required = false)
-    private RedisTemplate<String, Object> redisTemplate;
 
     private static final String TOKEN_PREFIX = "token:";
     private static final long TOKEN_EXPIRE_TIME = 24; // 24小时
@@ -60,61 +57,23 @@ public class AuthServiceImpl implements AuthService {
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
         System.out.println("生成的JWT令牌: " + token);
 
-        // 将令牌存储到Redis
-        String redisKey = TOKEN_PREFIX + token;
-        System.out.println("Redis Key: " + redisKey);
-        if (redisTemplate != null) {
-            try {
-                redisTemplate.opsForValue().set(redisKey, user, TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
-                System.out.println("Token已成功存储到Redis");
-            } catch (Exception e) {
-                System.out.println("Redis存储失败: " + e.getMessage());
-                // Redis 禁用时忽略错误
-                System.out.println("Redis已禁用，跳过存储");
-            }
-        } else {
-            System.out.println("Redis未启用，跳过存储");
-        }
+
 
         return Result.success("登录成功", token);
     }
 
     @Override
     public void logout(String token) {
-        // 从Redis中删除令牌
-        if (redisTemplate != null) {
-            try {
-                String redisKey = TOKEN_PREFIX + token;
-                redisTemplate.delete(redisKey);
-                System.out.println("Token已从Redis删除");
-            } catch (Exception e) {
-                // Redis 禁用时忽略错误
-                System.out.println("Redis已禁用，跳过删除");
-            }
-        } else {
-            System.out.println("Redis未启用，跳过删除");
-        }
+
     }
 
     @Override
     public Result<Object> getUserInfo(String token) {
-        // 从Redis中获取用户信息
+        // 从数据库中获取用户信息
         String redisKey = TOKEN_PREFIX + token;
-        System.out.println("尝试从Redis获取用户信息, Key: " + redisKey);
+        System.out.println("尝试从数据库获取用户信息, Key: " + redisKey);
 
         SysUser user = null;
-        if (redisTemplate != null) {
-            try {
-                user = (SysUser) redisTemplate.opsForValue().get(redisKey);
-                System.out.println("Redis查询结果: " + (user != null ? "找到用户" : "未找到用户"));
-            } catch (Exception e) {
-                // Redis 禁用时忽略错误
-                System.out.println("Redis已禁用，跳过查询");
-                user = null;
-            }
-        } else {
-            System.out.println("Redis未启用，跳过查询");
-        }
 
         if (user == null) {
             // 如果Redis中没有,尝试从令牌中解析
@@ -126,20 +85,7 @@ public class AuthServiceImpl implements AuthService {
                 user = userMapper.selectById(userId);
                 System.out.println("从数据库查询用户结果: " + (user != null ? "找到用户" : "未找到用户"));
 
-                if (user != null) {
-                    // 重新放入Redis
-                    if (redisTemplate != null) {
-                        try {
-                            redisTemplate.opsForValue().set(redisKey, user, TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
-                            System.out.println("用户信息已重新存储到Redis");
-                        } catch (Exception e) {
-                            // Redis 禁用时忽略错误
-                            System.out.println("Redis已禁用，跳过存储");
-                        }
-                    } else {
-                        System.out.println("Redis未启用，跳过存储");
-                    }
-                }
+
             }
         }
 
