@@ -27,7 +27,7 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private JwtUtil jwtUtil;
 
-    @Autowired
+    @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
 
     private static final String TOKEN_PREFIX = "token:";
@@ -63,13 +63,17 @@ public class AuthServiceImpl implements AuthService {
         // 将令牌存储到Redis
         String redisKey = TOKEN_PREFIX + token;
         System.out.println("Redis Key: " + redisKey);
-        try {
-            redisTemplate.opsForValue().set(redisKey, user, TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
-            System.out.println("Token已成功存储到Redis");
-        } catch (Exception e) {
-            System.out.println("Redis存储失败: " + e.getMessage());
-            // Redis 禁用时忽略错误
-            System.out.println("Redis已禁用，跳过存储");
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.opsForValue().set(redisKey, user, TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
+                System.out.println("Token已成功存储到Redis");
+            } catch (Exception e) {
+                System.out.println("Redis存储失败: " + e.getMessage());
+                // Redis 禁用时忽略错误
+                System.out.println("Redis已禁用，跳过存储");
+            }
+        } else {
+            System.out.println("Redis未启用，跳过存储");
         }
 
         return Result.success("登录成功", token);
@@ -78,13 +82,17 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void logout(String token) {
         // 从Redis中删除令牌
-        try {
-            String redisKey = TOKEN_PREFIX + token;
-            redisTemplate.delete(redisKey);
-            System.out.println("Token已从Redis删除");
-        } catch (Exception e) {
-            // Redis 禁用时忽略错误
-            System.out.println("Redis已禁用，跳过删除");
+        if (redisTemplate != null) {
+            try {
+                String redisKey = TOKEN_PREFIX + token;
+                redisTemplate.delete(redisKey);
+                System.out.println("Token已从Redis删除");
+            } catch (Exception e) {
+                // Redis 禁用时忽略错误
+                System.out.println("Redis已禁用，跳过删除");
+            }
+        } else {
+            System.out.println("Redis未启用，跳过删除");
         }
     }
 
@@ -95,13 +103,17 @@ public class AuthServiceImpl implements AuthService {
         System.out.println("尝试从Redis获取用户信息, Key: " + redisKey);
 
         SysUser user = null;
-        try {
-            user = (SysUser) redisTemplate.opsForValue().get(redisKey);
-            System.out.println("Redis查询结果: " + (user != null ? "找到用户" : "未找到用户"));
-        } catch (Exception e) {
-            // Redis 禁用时忽略错误
-            System.out.println("Redis已禁用，跳过查询");
-            user = null;
+        if (redisTemplate != null) {
+            try {
+                user = (SysUser) redisTemplate.opsForValue().get(redisKey);
+                System.out.println("Redis查询结果: " + (user != null ? "找到用户" : "未找到用户"));
+            } catch (Exception e) {
+                // Redis 禁用时忽略错误
+                System.out.println("Redis已禁用，跳过查询");
+                user = null;
+            }
+        } else {
+            System.out.println("Redis未启用，跳过查询");
         }
 
         if (user == null) {
@@ -116,12 +128,16 @@ public class AuthServiceImpl implements AuthService {
 
                 if (user != null) {
                     // 重新放入Redis
-                    try {
-                        redisTemplate.opsForValue().set(redisKey, user, TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
-                        System.out.println("用户信息已重新存储到Redis");
-                    } catch (Exception e) {
-                        // Redis 禁用时忽略错误
-                        System.out.println("Redis已禁用，跳过存储");
+                    if (redisTemplate != null) {
+                        try {
+                            redisTemplate.opsForValue().set(redisKey, user, TOKEN_EXPIRE_TIME, TimeUnit.HOURS);
+                            System.out.println("用户信息已重新存储到Redis");
+                        } catch (Exception e) {
+                            // Redis 禁用时忽略错误
+                            System.out.println("Redis已禁用，跳过存储");
+                        }
+                    } else {
+                        System.out.println("Redis未启用，跳过存储");
                     }
                 }
             }
