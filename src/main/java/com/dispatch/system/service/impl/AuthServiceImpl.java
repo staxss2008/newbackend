@@ -27,7 +27,6 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private JwtUtil jwtUtil;
 
-    private static final String TOKEN_PREFIX = "token:";
     private static final long TOKEN_EXPIRE_TIME = 24; // 24小时
 
     @Override
@@ -69,25 +68,13 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public Result<Object> getUserInfo(String token) {
-        // 从数据库中获取用户信息
-        String redisKey = TOKEN_PREFIX + token;
-        System.out.println("尝试从数据库获取用户信息, Key: " + redisKey);
+        // 从令牌中解析用户ID
+        Long userId = jwtUtil.getUserIdFromToken(token);
+        System.out.println("从令牌解析的用户ID: " + userId);
 
-        SysUser user = null;
-
-        if (user == null) {
-            // 如果Redis中没有,尝试从令牌中解析
-            System.out.println("尝试从JWT令牌中解析用户ID");
-            Long userId = jwtUtil.getUserIdFromToken(token);
-            System.out.println("从令牌解析的用户ID: " + userId);
-
-            if (userId != null) {
-                user = userMapper.selectById(userId);
-                System.out.println("从数据库查询用户结果: " + (user != null ? "找到用户" : "未找到用户"));
-
-
-            }
-        }
+        // 从数据库查询用户信息
+        SysUser user = userMapper.selectById(userId);
+        System.out.println("从数据库查询用户结果: " + (user != null ? "找到用户" : "未找到用户"));
 
         if (user == null) {
             System.out.println("用户验证失败，返回错误");
