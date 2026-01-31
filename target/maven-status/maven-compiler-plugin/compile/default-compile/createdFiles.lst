@@ -1,7 +1,6 @@
 com\dispatch\exception\BusinessException.class
 com\dispatch\system\service\SysUserService.class
 com\dispatch\system\entity\SysUser.class
-com\dispatch\config\RedisConfig.class
 com\dispatch\system\mapper\VehicleMapper.class
 com\dispatch\config\SecurityConfig.class
 com\dispatch\system\controller\SysUserController.class
@@ -14,6 +13,7 @@ com\dispatch\config\CorsConfig.class
 com\dispatch\system\service\DispatchRecordService.class
 com\dispatch\system\service\impl\DispatchRecordServiceImpl.class
 com\dispatch\system\service\VehicleService.class
+com\dispatch\config\DataSourceConfig.class
 com\dispatch\system\service\impl\FeeStandardServiceImpl.class
 com\dispatch\filter\JwtAuthenticationFilter.class
 com\dispatch\system\service\impl\SysUserServiceImpl.class

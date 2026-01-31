@@ -23,6 +23,7 @@ E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispat
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\service\AuthService.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\entity\DispatchRecord.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\service\FeeStandardService.java
+E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\config\DataSourceConfig.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\controller\MonthlyStatisticsController.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\controller\AuthController.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\entity\Vehicle.java
@@ -35,7 +36,6 @@ E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispat
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\mapper\SysUserMapper.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\controller\SysUserController.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\mapper\FeeStandardMapper.java
-E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\config\RedisConfig.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\entity\SysUser.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\mapper\MonthlyStatisticsMapper.java
 E:\JSPwork\WORKPLACE\dispatch-management-system\backend\src\main\java\com\dispatch\system\controller\FeeStandardController.java

@@ -8,6 +8,8 @@ import com.dispatch.system.mapper.DispatchRecordMapper;
 import com.dispatch.system.mapper.FeeStandardMapper;
 import com.dispatch.system.service.DispatchRecordService;
 import com.dispatch.system.service.MonthlyStatisticsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,8 @@ import java.util.Map;
  */
 @Service
 public class DispatchRecordServiceImpl extends ServiceImpl<DispatchRecordMapper, DispatchRecord> implements DispatchRecordService {
+
+    private static final Logger log = LoggerFactory.getLogger(DispatchRecordServiceImpl.class);
 
     @Autowired
     private FeeStandardMapper feeStandardMapper;
@@ -64,7 +68,10 @@ public class DispatchRecordServiceImpl extends ServiceImpl<DispatchRecordMapper,
 
     @Override
     public Map<String, Object> getMonthlyStatistics(Long driverId, Integer year, Integer month) {
-        return baseMapper.getMonthlyStatistics(driverId, year, month);
+        log.info("getMonthlyStatistics - 调用 Mapper: driverId={}, year={}, month={}", driverId, year, month);
+        Map<String, Object> result = baseMapper.getMonthlyStatistics(driverId, year, month);
+        log.info("getMonthlyStatistics - Mapper 返回结果: {}", result);
+        return result;
     }
 
     @Override

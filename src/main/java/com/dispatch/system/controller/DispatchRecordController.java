@@ -7,6 +7,8 @@ import com.dispatch.common.Result;
 import com.dispatch.system.entity.DispatchRecord;
 import com.dispatch.system.entity.SysUser;
 import com.dispatch.system.service.DispatchRecordService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +24,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/dispatch")
 public class DispatchRecordController {
+
+    private static final Logger log = LoggerFactory.getLogger(DispatchRecordController.class);
 
     @Autowired
     private DispatchRecordService dispatchRecordService;
@@ -131,7 +135,7 @@ public class DispatchRecordController {
         SysUser currentUser = getCurrentUser(token);
 
         // 如果是驾驶员，只能查看自己的记录
-        if (currentUser != null && currentUser.getRole() == 1 && !currentUser.getDriverId().equals(driverId)) {
+        if (currentUser != null && currentUser.getRole() == 2 && currentUser.getDriverId() != null && !currentUser.getDriverId().equals(driverId)) {
             return Result.error("无权查看其他驾驶员的记录");
         }
 
@@ -153,11 +157,13 @@ public class DispatchRecordController {
         SysUser currentUser = getCurrentUser(token);
 
         // 如果是驾驶员，只能查看自己的记录
-        if (currentUser != null && currentUser.getRole() == 1 && !currentUser.getDriverId().equals(driverId)) {
+        if (currentUser != null && currentUser.getRole() == 2 && currentUser.getDriverId() != null && !currentUser.getDriverId().equals(driverId)) {
             return Result.error("无权查看其他驾驶员的记录");
         }
 
+        log.info("getMonthlyStatistics - 接收参数: driverId={}, year={}, month={}", driverId, year, month);
         Map<String, Object> statistics = dispatchRecordService.getMonthlyStatistics(driverId, year, month);
+        log.info("getMonthlyStatistics - 返回结果: {}", statistics);
         return Result.success(statistics);
     }
 

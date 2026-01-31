@@ -67,8 +67,8 @@ public interface DispatchRecordMapper extends BaseMapper<DispatchRecord> {
             "LEFT JOIN driver d ON dr.driver_id = d.id " +
             "LEFT JOIN vehicle v ON dr.vehicle_id = v.id " +
             "WHERE dr.driver_id = #{driverId} " +
-            "AND YEAR(dr.record_date) = #{year} " +
-            "AND MONTH(dr.record_date) = #{month} " +
+            "AND dr.record_date >= STR_TO_DATE(CONCAT(#{year}, '-', LPAD(#{month}, 2, '0'), '-01'), '%Y-%m-%d') " +
+            "AND dr.record_date < STR_TO_DATE(CONCAT(#{year}, '-', LPAD(#{month}, 2, '0'), '-01'), '%Y-%m-%d') + INTERVAL 1 MONTH " +
             "ORDER BY dr.record_date DESC, dr.departure_time DESC")
     List<Map<String, Object>> getMonthlyDetailByDriver(@Param("driverId") Long driverId,
                                                          @Param("year") Integer year,
@@ -77,50 +77,6 @@ public interface DispatchRecordMapper extends BaseMapper<DispatchRecord> {
     /**
      * 统计驾驶员月度数据
      */
-    @Select("SELECT " +
-            "COUNT(*) as total_count, " +
-            "IFNULL(SUM(total_mileage), 0) as total_mileage, " +
-            "IFNULL(SUM(total_mileage), 0) * (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'mileage_unit_price') as mileage_subsidy, " +
-            "LEAST(IFNULL(SUM(total_mileage), 0) * (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'mileage_unit_price'), " +
-            "     (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'mileage_max_amount')) as actual_mileage_amount, " +
-            "IFNULL(SUM(overtime_amount), 0) as total_overtime_amount, " +
-            "IFNULL(SUM(duty_subsidy), 0) as total_duty_subsidy, " +
-            "CASE " +
-            "  WHEN (SELECT COUNT(DISTINCT dr.record_date) FROM dispatch_record dr WHERE dr.driver_id = #{driverId} " +
-            "      AND YEAR(dr.record_date) = #{year} AND MONTH(dr.record_date) = #{month}) > " +
-            "      (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'monthly_working_days') " +
-            "  THEN ((SELECT COUNT(DISTINCT dr.record_date) FROM dispatch_record dr WHERE dr.driver_id = #{driverId} " +
-            "      AND YEAR(dr.record_date) = #{year} AND MONTH(dr.record_date) = #{month}) - " +
-            "      (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'monthly_working_days')) * " +
-            "      (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'rest_day_wage') " +
-            "  WHEN (SELECT COUNT(DISTINCT dr.record_date) FROM dispatch_record dr WHERE dr.driver_id = #{driverId} " +
-            "      AND YEAR(dr.record_date) = #{year} AND MONTH(dr.record_date) = #{month}) < " +
-            "      (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'monthly_working_days') " +
-            "  THEN -((SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'monthly_working_days') - " +
-            "      (SELECT COUNT(DISTINCT dr.record_date) FROM dispatch_record dr WHERE dr.driver_id = #{driverId} " +
-            "      AND YEAR(dr.record_date) = #{year} AND MONTH(dr.record_date) = #{month})) * " +
-            "      (SELECT d.daily_wage FROM driver d WHERE d.id = #{driverId}) " +
-            "  ELSE 0 " +
-            "END as total_rest_day_wage, " +
-            "IFNULL(SUM(safety_bonus), 0) as total_safety_bonus, " +
-            "LEAST(IFNULL(SUM(total_mileage), 0) * (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'mileage_unit_price'), " +
-            "     (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'mileage_max_amount')) + " +
-            "IFNULL(SUM(overtime_amount), 0) + " +
-            "IFNULL(SUM(duty_subsidy), 0) + " +
-            "LEAST(" +
-            "    (SELECT COUNT(DISTINCT dr.record_date) FROM dispatch_record dr WHERE dr.driver_id = #{driverId} " +
-            "        AND YEAR(dr.record_date) = #{year} AND MONTH(dr.record_date) = #{month}) * " +
-            "        (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'safety_bonus_standard') / " +
-            "        (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'monthly_working_days'), " +
-            "    (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'safety_bonus_standard')) + " +
-            "(SELECT SUM(CASE WHEN EXISTS (SELECT 1 FROM holiday_config WHERE holiday_date = dr.record_date) " +
-            "    THEN (SELECT CAST(config_value AS DECIMAL(10,2)) FROM fee_standard WHERE config_key = 'holiday_wage') " +
-            "    ELSE 0 END) FROM dispatch_record dr WHERE dr.driver_id = #{driverId} " +
-            "    AND YEAR(dr.record_date) = #{year} AND MONTH(dr.record_date) = #{month}) as total_amount " +
-            "FROM dispatch_record " +
-            "WHERE driver_id = #{driverId} " +
-            "AND YEAR(record_date) = #{year} " +
-            "AND MONTH(record_date) = #{month}")
     Map<String, Object> getMonthlyStatistics(@Param("driverId") Long driverId,
                                              @Param("year") Integer year,
                                              @Param("month") Integer month);
@@ -141,8 +97,8 @@ public interface DispatchRecordMapper extends BaseMapper<DispatchRecord> {
     @Select("SELECT COUNT(DISTINCT record_date) " +
             "FROM dispatch_record " +
             "WHERE driver_id = #{driverId} " +
-            "AND YEAR(record_date) = #{year} " +
-            "AND MONTH(record_date) = #{month}")
+            "AND record_date >= STR_TO_DATE(CONCAT(#{year}, '-', LPAD(#{month}, 2, '0'), '-01'), '%Y-%m-%d') " +
+            "AND record_date < STR_TO_DATE(CONCAT(#{year}, '-', LPAD(#{month}, 2, '0'), '-01'), '%Y-%m-%d') + INTERVAL 1 MONTH")
     int getActualWorkDays(@Param("driverId") Long driverId, 
                         @Param("year") Integer year, 
                         @Param("month") Integer month);

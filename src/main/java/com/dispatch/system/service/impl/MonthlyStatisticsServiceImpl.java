@@ -88,13 +88,13 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
                 if (totalMileage == null) totalMileage = BigDecimal.ZERO;
 
                 // 使用查询返回的公里补贴和实际金额
-                BigDecimal mileageSubsidy = (BigDecimal) stats.get("mileage_subsidy");
-                if (mileageSubsidy == null) {
+                BigDecimal mileageSubsidy = convertToBigDecimal(stats.get("mileage_subsidy"));
+                if (mileageSubsidy == null || mileageSubsidy.compareTo(BigDecimal.ZERO) == 0) {
                     mileageSubsidy = totalMileage.multiply(mileageUnitPrice);
                 }
 
-                BigDecimal actualMileageAmount = (BigDecimal) stats.get("actual_mileage_amount");
-                if (actualMileageAmount == null) {
+                BigDecimal actualMileageAmount = convertToBigDecimal(stats.get("actual_mileage_amount"));
+                if (actualMileageAmount == null || actualMileageAmount.compareTo(BigDecimal.ZERO) == 0) {
                     actualMileageAmount = mileageSubsidy.min(mileageMaxAmount);
                 }
 
@@ -103,12 +103,12 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
                 monthlyStats.setMileageSubsidy(mileageSubsidy);
                 monthlyStats.setActualMileageAmount(actualMileageAmount);
 
-                monthlyStats.setOvertimeAmount((BigDecimal) stats.get("total_overtime_amount"));
+                monthlyStats.setOvertimeAmount(convertToBigDecimal(stats.get("total_overtime_amount")));
                 if (monthlyStats.getOvertimeAmount() == null) {
                     monthlyStats.setOvertimeAmount(BigDecimal.ZERO);
                 }
 
-                monthlyStats.setDutySubsidy((BigDecimal) stats.get("total_duty_subsidy"));
+                monthlyStats.setDutySubsidy(convertToBigDecimal(stats.get("total_duty_subsidy")));
                 if (monthlyStats.getDutySubsidy() == null) {
                     monthlyStats.setDutySubsidy(BigDecimal.ZERO);
                 }
@@ -123,7 +123,10 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
                 }
                 
                 BigDecimal restDayWageTotal = BigDecimal.ZERO;
-                if (actualWorkDays > workDays) {
+                if (actualWorkDays == 0) {
+                    // 没有出车记录，不扣除请假工资
+                    restDayWageTotal = BigDecimal.ZERO;
+                } else if (actualWorkDays > workDays) {
                     // 实际出勤天数 > 标准工作天数：发放公休日工资
                     int overtimeDays = actualWorkDays - workDays;
                     FeeStandard restDayWageStandard = feeStandardMapper.findByConfigKey("rest_day_wage");
@@ -292,5 +295,30 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
     @Override
     public MonthlyStatistics getStatisticsById(Long id) {
         return getById(id);
+    }
+
+    /**
+     * 将对象转换为 BigDecimal
+     */
+    private BigDecimal convertToBigDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        }
+        if (value instanceof Long) {
+            return new BigDecimal((Long) value);
+        }
+        if (value instanceof Integer) {
+            return new BigDecimal((Integer) value);
+        }
+        if (value instanceof Double) {
+            return new BigDecimal(value.toString());
+        }
+        if (value instanceof String) {
+            return new BigDecimal((String) value);
+        }
+        return null;
     }
 }

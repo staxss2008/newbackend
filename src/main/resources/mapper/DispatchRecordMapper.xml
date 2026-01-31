@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dispatch.system.mapper.DispatchRecordMapper">
+
+    <!-- 统计驾驶员月度数据 -->
+    <select id="getMonthlyStatistics" resultType="java.util.HashMap">
+        SELECT 
+            COUNT(*) as total_count,
+            IFNULL(SUM(total_mileage), 0) as total_mileage,
+            0.00 as mileage_subsidy,
+            0.00 as actual_mileage_amount,
+            IFNULL(SUM(overtime_amount), 0) as total_overtime_amount,
+            IFNULL(SUM(duty_subsidy), 0) as total_duty_subsidy,
+            IFNULL(SUM(rest_day_wage), 0) as total_rest_day_wage,
+            IFNULL(SUM(safety_bonus), 0) as total_safety_bonus,
+            IFNULL(SUM(total_amount), 0) as total_amount
+        FROM dispatch_record
+        WHERE driver_id = #{driverId}
+        AND record_date &gt;= STR_TO_DATE(CONCAT(#{year}, '-', LPAD(#{month}, 2, '0'), '-01'), '%Y-%m-%d')
+        AND record_date &lt; STR_TO_DATE(CONCAT(#{year}, '-', LPAD(#{month}, 2, '0'), '-01'), '%Y-%m-%d') + INTERVAL 1 MONTH
+    </select>
+
+</mapper>
