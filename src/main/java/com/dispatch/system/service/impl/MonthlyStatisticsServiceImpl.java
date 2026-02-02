@@ -2,15 +2,18 @@ package com.dispatch.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.dispatch.system.cache.FeeStandardCache;
+import com.dispatch.system.constant.CalculationConstants;
 import com.dispatch.system.entity.*;
 import com.dispatch.system.mapper.*;
 import com.dispatch.system.service.MonthlyStatisticsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.HashMap;
@@ -23,6 +26,8 @@ import java.util.Map;
 @Service
 public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsMapper, MonthlyStatistics> implements MonthlyStatisticsService {
 
+    private static final Logger log = LoggerFactory.getLogger(MonthlyStatisticsServiceImpl.class);
+
     @Autowired
     private DispatchRecordMapper dispatchRecordMapper;
 
@@ -30,7 +35,7 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
     private DriverMapper driverMapper;
 
     @Autowired
-    private FeeStandardMapper feeStandardMapper;
+    private FeeStandardCache feeStandardCache;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -53,19 +58,15 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
         }
 
         // 获取费用标准
-        FeeStandard mileageUnitPriceStandard = feeStandardMapper.findByConfigKey("mileage_unit_price");
-        FeeStandard mileageMaxAmountStandard = feeStandardMapper.findByConfigKey("mileage_max_amount");
-        FeeStandard safetyBonusStandard = feeStandardMapper.findByConfigKey("safety_bonus_standard");
-        FeeStandard workDaysStandard = feeStandardMapper.findByConfigKey("monthly_working_days");
+        String mileageUnitPriceStr = feeStandardCache.getValue("mileage_unit_price", "0.1");
+        String mileageMaxAmountStr = feeStandardCache.getValue("mileage_max_amount", "500");
+        String safetyBonusStr = feeStandardCache.getValue("safety_bonus_standard", "200");
+        String workDaysStr = feeStandardCache.getValue("monthly_working_days", "22");
 
-        BigDecimal mileageUnitPrice = mileageUnitPriceStandard != null ? 
-                new BigDecimal(mileageUnitPriceStandard.getConfigValue()) : new BigDecimal("0.1");
-        BigDecimal mileageMaxAmount = mileageMaxAmountStandard != null ? 
-                new BigDecimal(mileageMaxAmountStandard.getConfigValue()) : new BigDecimal("500");
-        BigDecimal safetyBonus = safetyBonusStandard != null ? 
-                new BigDecimal(safetyBonusStandard.getConfigValue()) : new BigDecimal("200");
-        int workDays = workDaysStandard != null ?
-                Integer.parseInt(workDaysStandard.getConfigValue()) : 22;
+        BigDecimal mileageUnitPrice = new BigDecimal(mileageUnitPriceStr); 
+        BigDecimal mileageMaxAmount = new BigDecimal(mileageMaxAmountStr); 
+        BigDecimal safetyBonus = new BigDecimal(safetyBonusStr); 
+        int workDays = Integer.parseInt(workDaysStr);
 
         // 为每个驾驶员计算月度统计
         for (Driver driver : drivers) {
@@ -85,16 +86,16 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
             // 设置统计数据
             if (stats != null) {
                 BigDecimal totalMileage = (BigDecimal) stats.get("total_mileage");
-                if (totalMileage == null) totalMileage = BigDecimal.ZERO;
+                if (totalMileage == null) totalMileage = CalculationConstants.ZERO;
 
                 // 使用查询返回的公里补贴和实际金额
                 BigDecimal mileageSubsidy = convertToBigDecimal(stats.get("mileage_subsidy"));
-                if (mileageSubsidy == null || mileageSubsidy.compareTo(BigDecimal.ZERO) == 0) {
+                if (mileageSubsidy == null || mileageSubsidy.compareTo(CalculationConstants.ZERO) == 0) {
                     mileageSubsidy = totalMileage.multiply(mileageUnitPrice);
                 }
 
                 BigDecimal actualMileageAmount = convertToBigDecimal(stats.get("actual_mileage_amount"));
-                if (actualMileageAmount == null || actualMileageAmount.compareTo(BigDecimal.ZERO) == 0) {
+                if (actualMileageAmount == null || actualMileageAmount.compareTo(CalculationConstants.ZERO) == 0) {
                     actualMileageAmount = mileageSubsidy.min(mileageMaxAmount);
                 }
 
@@ -105,12 +106,12 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
 
                 monthlyStats.setOvertimeAmount(convertToBigDecimal(stats.get("total_overtime_amount")));
                 if (monthlyStats.getOvertimeAmount() == null) {
-                    monthlyStats.setOvertimeAmount(BigDecimal.ZERO);
+                    monthlyStats.setOvertimeAmount(CalculationConstants.ZERO);
                 }
 
                 monthlyStats.setDutySubsidy(convertToBigDecimal(stats.get("total_duty_subsidy")));
                 if (monthlyStats.getDutySubsidy() == null) {
-                    monthlyStats.setDutySubsidy(BigDecimal.ZERO);
+                    monthlyStats.setDutySubsidy(CalculationConstants.ZERO);
                 }
 
                 // 计算公休日工资（根据实际出勤天数与标准工作天数的差值计算）
@@ -122,22 +123,21 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
                     actualWorkDays = 0;
                 }
                 
-                BigDecimal restDayWageTotal = BigDecimal.ZERO;
+                BigDecimal restDayWageTotal = CalculationConstants.ZERO;
                 if (actualWorkDays == 0) {
                     // 没有出车记录，不扣除请假工资
-                    restDayWageTotal = BigDecimal.ZERO;
+                    restDayWageTotal = CalculationConstants.ZERO;
                 } else if (actualWorkDays > workDays) {
                     // 实际出勤天数 > 标准工作天数：发放公休日工资
                     int overtimeDays = actualWorkDays - workDays;
-                    FeeStandard restDayWageStandard = feeStandardMapper.findByConfigKey("rest_day_wage");
-                    BigDecimal restDayWage = restDayWageStandard != null ?
-                            new BigDecimal(restDayWageStandard.getConfigValue()) : BigDecimal.ZERO;
+                    String restDayWageStr = feeStandardCache.getValue("rest_day_wage", "0");
+                    BigDecimal restDayWage = new BigDecimal(restDayWageStr);
                     restDayWageTotal = new BigDecimal(overtimeDays).multiply(restDayWage);
                 } else if (actualWorkDays < workDays) {
                     // 实际出勤天数 < 标准工作天数：扣除请假工资
                     int leaveDays = workDays - actualWorkDays;
                     BigDecimal dailyWage = driver.getDailyWage() != null ?
-                            driver.getDailyWage() : BigDecimal.ZERO;
+                            driver.getDailyWage() : CalculationConstants.ZERO;
                     restDayWageTotal = new BigDecimal(leaveDays).multiply(dailyWage).negate();
                 }
                 monthlyStats.setRestDayWageTotal(restDayWageTotal);
@@ -153,7 +153,7 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
                 // 计算实际安全奖（按实际出勤天数计算）
                 BigDecimal calculatedSafetyBonus = new BigDecimal(actualWorkDays)
                         .multiply(safetyBonus)
-                        .divide(new BigDecimal(workDays), 2, RoundingMode.HALF_UP);
+                        .divide(new BigDecimal(workDays), CalculationConstants.SCALE, CalculationConstants.ROUNDING_MODE);
                 
                 // 确保不超过安全奖标准
                 if (calculatedSafetyBonus.compareTo(safetyBonus) > 0) {
@@ -163,7 +163,7 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
 
                 // 设置底薪
                 BigDecimal baseSalary = driver.getBaseSalary() != null ?
-                        driver.getBaseSalary() : BigDecimal.ZERO;
+                        driver.getBaseSalary() : CalculationConstants.ZERO;
                 monthlyStats.setBaseSalary(baseSalary);
 
                 // 手动计算合计金额（包含公休日工资和底薪）
@@ -177,17 +177,17 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
                 monthlyStats.setTotalAmount(totalAmount);
             } else {
                 // 没有数据的情况
-                monthlyStats.setTotalMileage(BigDecimal.ZERO);
+                monthlyStats.setTotalMileage(CalculationConstants.ZERO);
                 monthlyStats.setMileageUnitPrice(mileageUnitPrice);
-                monthlyStats.setMileageSubsidy(BigDecimal.ZERO);
-                monthlyStats.setActualMileageAmount(BigDecimal.ZERO);
-                monthlyStats.setOvertimeAmount(BigDecimal.ZERO);
-                monthlyStats.setDutySubsidy(BigDecimal.ZERO);
-                monthlyStats.setLegalHolidayAmount(BigDecimal.ZERO);
-                monthlyStats.setRestDayWageTotal(BigDecimal.ZERO);
-                monthlyStats.setSafetyBonusTotal(BigDecimal.ZERO);
+                monthlyStats.setMileageSubsidy(CalculationConstants.ZERO);
+                monthlyStats.setActualMileageAmount(CalculationConstants.ZERO);
+                monthlyStats.setOvertimeAmount(CalculationConstants.ZERO);
+                monthlyStats.setDutySubsidy(CalculationConstants.ZERO);
+                monthlyStats.setLegalHolidayAmount(CalculationConstants.ZERO);
+                monthlyStats.setRestDayWageTotal(CalculationConstants.ZERO);
+                monthlyStats.setSafetyBonusTotal(CalculationConstants.ZERO);
                 monthlyStats.setBaseSalary(driver.getBaseSalary() != null ?
-                        driver.getBaseSalary() : BigDecimal.ZERO);
+                        driver.getBaseSalary() : CalculationConstants.ZERO);
                 // 没有数据的情况，合计金额只包含底薪
                 monthlyStats.setTotalAmount(monthlyStats.getBaseSalary());
             }
@@ -280,7 +280,7 @@ public class MonthlyStatisticsServiceImpl extends ServiceImpl<MonthlyStatisticsM
             map.put("legalHolidayAmount", stats.getLegalHolidayAmount());
             map.put("restDayWageTotal", stats.getRestDayWageTotal());
             map.put("safetyBonusTotal", stats.getSafetyBonusTotal());
-            map.put("baseSalary", driver != null ? driver.getBaseSalary() : BigDecimal.ZERO);
+            map.put("baseSalary", driver != null ? driver.getBaseSalary() : CalculationConstants.ZERO);
             map.put("totalAmount", stats.getTotalAmount());
             map.put("status", stats.getStatus());
             map.put("confirmedBy", stats.getConfirmedBy());

@@ -2,12 +2,14 @@ package com.dispatch.system.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.dispatch.system.cache.FeeStandardCache;
+import com.dispatch.system.constant.CalculationConstants;
 import com.dispatch.system.entity.DispatchRecord;
-import com.dispatch.system.entity.FeeStandard;
+import com.dispatch.system.exception.OvertimeCalculationException;
 import com.dispatch.system.mapper.DispatchRecordMapper;
-import com.dispatch.system.mapper.FeeStandardMapper;
 import com.dispatch.system.service.DispatchRecordService;
 import com.dispatch.system.service.MonthlyStatisticsService;
+import com.dispatch.system.util.OvertimeCalculator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +31,7 @@ public class DispatchRecordServiceImpl extends ServiceImpl<DispatchRecordMapper,
     private static final Logger log = LoggerFactory.getLogger(DispatchRecordServiceImpl.class);
 
     @Autowired
-    private FeeStandardMapper feeStandardMapper;
+    private FeeStandardCache feeStandardCache;
 
     @Autowired
     private MonthlyStatisticsService monthlyStatisticsService;
@@ -77,7 +79,7 @@ public class DispatchRecordServiceImpl extends ServiceImpl<DispatchRecordMapper,
     @Override
     public void calculateRecordAmount(DispatchRecord record) {
         // 初始化总金额为0
-        BigDecimal totalAmount = BigDecimal.ZERO;
+        BigDecimal totalAmount = CalculationConstants.ZERO;
 
         // 计算行驶里程
         if (record.getStartMileage() != null && record.getEndMileage() != null) {
@@ -85,10 +87,11 @@ public class DispatchRecordServiceImpl extends ServiceImpl<DispatchRecordMapper,
             record.setTotalMileage(totalMileage);
 
             // 计算公里数费用（公里补贴）
-            FeeStandard mileageUnitPrice = feeStandardMapper.findByConfigKey("mileage_unit_price");
-            if (mileageUnitPrice != null) {
-                BigDecimal unitPrice = new BigDecimal(mileageUnitPrice.getConfigValue());
-                BigDecimal mileageAmount = totalMileage.multiply(unitPrice).setScale(2, RoundingMode.HALF_UP);
+            String mileageUnitPriceStr = feeStandardCache.getValue("mileage_unit_price");
+            if (mileageUnitPriceStr != null) {
+                BigDecimal unitPrice = new BigDecimal(mileageUnitPriceStr);
+                BigDecimal mileageAmount = totalMileage.multiply(unitPrice)
+                        .setScale(CalculationConstants.SCALE, CalculationConstants.ROUNDING_MODE);
                 // 将公里补贴存储到bridge_repair_fee字段
                 record.setBridgeRepairFee(mileageAmount);
                 // 公里补贴不加入totalAmount，因为公里补贴应该单独计算
@@ -97,14 +100,14 @@ public class DispatchRecordServiceImpl extends ServiceImpl<DispatchRecordMapper,
 
         // 计算值班补贴
         if (record.getIsDuty() != null && record.getIsDuty() == 1) {
-            FeeStandard dutyStandard = feeStandardMapper.findByConfigKey("duty_subsidy_amount");
-            if (dutyStandard != null) {
-                BigDecimal dutySubsidy = new BigDecimal(dutyStandard.getConfigValue());
+            String dutySubsidyStr = feeStandardCache.getValue("duty_subsidy_amount");
+            if (dutySubsidyStr != null) {
+                BigDecimal dutySubsidy = new BigDecimal(dutySubsidyStr);
                 record.setDutySubsidy(dutySubsidy);
                 totalAmount = totalAmount.add(dutySubsidy);
             }
         } else {
-            record.setDutySubsidy(BigDecimal.ZERO);
+            record.setDutySubsidy(CalculationConstants.ZERO);
         }
 
         // 根据出车时间和收车时间判断是否属于加班
@@ -115,58 +118,52 @@ public class DispatchRecordServiceImpl extends ServiceImpl<DispatchRecordMapper,
         // 加班费按照费用标准的阶梯规则执行：<2小时0元，2-3小时40元，3-4小时60元，4-5小时80元，>=5小时100元
         if (record.getDepartureTime() != null && record.getReturnTime() != null) {
             // 获取正常工作时间
-            FeeStandard startTimeStandard = feeStandardMapper.findByConfigKey("work_start_time");
-            FeeStandard endTimeStandard = feeStandardMapper.findByConfigKey("work_end_time");
+            String startTimeStr = feeStandardCache.getValue("work_start_time");
+            String endTimeStr = feeStandardCache.getValue("work_end_time");
 
-            if (startTimeStandard != null && endTimeStandard != null) {
+            if (startTimeStr != null && endTimeStr != null) {
                 try {
-                    java.time.LocalTime departureTime = record.getDepartureTime();
-                    java.time.LocalTime returnTime = record.getReturnTime();
-                    java.time.LocalTime workStartTime = java.time.LocalTime.parse(startTimeStandard.getConfigValue());
-                    java.time.LocalTime workEndTime = java.time.LocalTime.parse(endTimeStandard.getConfigValue());
+                    LocalTime departureTime = record.getDepartureTime();
+                    LocalTime returnTime = record.getReturnTime();
+                    LocalTime workStartTime = LocalTime.parse(startTimeStr);
+                    LocalTime workEndTime = LocalTime.parse(endTimeStr);
 
-                    // 计算上班前加班小时数（向下取整到小时）
-                    BigDecimal earlyOvertimeHours = BigDecimal.ZERO;
-                    if (departureTime.isBefore(workStartTime)) {
-                        long earlyMinutes = java.time.Duration.between(departureTime, workStartTime).toMinutes();
-                        // 向下取整到小时
-                        earlyOvertimeHours = new BigDecimal(earlyMinutes / 60);
-                    }
+                    // 计算上班前加班小时数
+                    BigDecimal earlyOvertimeHours = OvertimeCalculator.calculateEarlyOvertimeHours(
+                            departureTime, workStartTime);
 
-                    // 计算下班后加班小时数（向下取整到小时）
-                    BigDecimal lateOvertimeHours = BigDecimal.ZERO;
-                    if (returnTime.isAfter(workEndTime)) {
-                        long lateMinutes = java.time.Duration.between(workEndTime, returnTime).toMinutes();
-                        // 向下取整到小时
-                        lateOvertimeHours = new BigDecimal(lateMinutes / 60);
-                    }
+                    // 计算下班后加班小时数
+                    BigDecimal lateOvertimeHours = OvertimeCalculator.calculateLateOvertimeHours(
+                            returnTime, workEndTime);
 
                     // 计算上班前加班费：按照阶梯规则，最高100元
-                    BigDecimal earlyOvertimeAmount = calculateOvertimeFeeByHours(earlyOvertimeHours);
+                    BigDecimal earlyOvertimeAmount = OvertimeCalculator.calculateOvertimeFeeByHours(earlyOvertimeHours);
 
                     // 计算下班后加班费：按照阶梯规则，最高100元
-                    BigDecimal lateOvertimeAmount = calculateOvertimeFeeByHours(lateOvertimeHours);
+                    BigDecimal lateOvertimeAmount = OvertimeCalculator.calculateOvertimeFeeByHours(lateOvertimeHours);
 
                     // 总加班费 = 上班前加班费 + 下班后加班费
                     BigDecimal totalOvertimeAmount = earlyOvertimeAmount.add(lateOvertimeAmount);
                     record.setOvertimeAmount(totalOvertimeAmount);
                     totalAmount = totalAmount.add(totalOvertimeAmount);
 
+                } catch (OvertimeCalculationException e) {
+                    log.error("计算加班费失败: recordId={}", record.getId(), e);
+                    record.setOvertimeAmount(CalculationConstants.ZERO);
                 } catch (Exception e) {
-                    System.err.println("计算加班费失败: " + e.getMessage());
-                    e.printStackTrace();
-                    record.setOvertimeAmount(BigDecimal.ZERO);
+                    log.error("解析工作时间失败: recordId={}", record.getId(), e);
+                    record.setOvertimeAmount(CalculationConstants.ZERO);
                 }
             }
         }
 
         // 计算公休日工资
         // 前端已移除加班类型字段，公休日工资设置为0
-        record.setRestDayWage(BigDecimal.ZERO);
+        record.setRestDayWage(CalculationConstants.ZERO);
 
         // 计算安全奖
         // 安全奖通常在月度统计时统一计算,这里可以设置为0
-        record.setSafetyBonus(BigDecimal.ZERO);
+        record.setSafetyBonus(CalculationConstants.ZERO);
 
         // 将安全奖加入totalAmount（虽然当前为0，但保持计算逻辑一致）
         totalAmount = totalAmount.add(record.getSafetyBonus());
@@ -215,57 +212,44 @@ public class DispatchRecordServiceImpl extends ServiceImpl<DispatchRecordMapper,
         }
 
         // 获取正常工作时间
-        FeeStandard startTimeStandard = feeStandardMapper.findByConfigKey("work_start_time");
-        FeeStandard endTimeStandard = feeStandardMapper.findByConfigKey("work_end_time");
+        String startTimeStr = feeStandardCache.getValue("work_start_time");
+        String endTimeStr = feeStandardCache.getValue("work_end_time");
 
-        if (startTimeStandard == null || endTimeStandard == null) {
+        if (startTimeStr == null || endTimeStr == null) {
             return;
         }
 
-        String startTimeStr = startTimeStandard.getConfigValue();
-        String endTimeStr = endTimeStandard.getConfigValue();
-
         try {
             // 获取出车时间和收车时间
-            java.time.LocalTime departureTime = record.getDepartureTime();
-            java.time.LocalTime returnTime = record.getReturnTime();
+            LocalTime departureTime = record.getDepartureTime();
+            LocalTime returnTime = record.getReturnTime();
 
             // 解析工作时间配置
-            java.time.LocalTime workStartTime = java.time.LocalTime.parse(startTimeStr);
-            java.time.LocalTime workEndTime = java.time.LocalTime.parse(endTimeStr);
+            LocalTime workStartTime = LocalTime.parse(startTimeStr);
+            LocalTime workEndTime = LocalTime.parse(endTimeStr);
 
-            if (departureTime == null || returnTime == null) {
-                return;
-            }
+            // 计算上班前加班小时数
+            BigDecimal earlyOvertimeHours = OvertimeCalculator.calculateEarlyOvertimeHours(
+                    departureTime, workStartTime);
 
-            BigDecimal earlyOvertimeHours = BigDecimal.ZERO;  // 上班前加班小时数
-            BigDecimal lateOvertimeHours = BigDecimal.ZERO;   // 下班后加班小时数
-
-            // 如果出车时间早于上班时间，计算早到加班时间
-            if (departureTime.isBefore(workStartTime)) {
-                long earlyMinutes = java.time.Duration.between(departureTime, workStartTime).toMinutes();
-                earlyOvertimeHours = new BigDecimal(earlyMinutes).divide(new BigDecimal(60), 2, RoundingMode.HALF_UP);
-            }
-
-            // 如果收车时间晚于下班时间，计算晚退加班时间
-            if (returnTime.isAfter(workEndTime)) {
-                long lateMinutes = java.time.Duration.between(workEndTime, returnTime).toMinutes();
-                lateOvertimeHours = new BigDecimal(lateMinutes).divide(new BigDecimal(60), 2, RoundingMode.HALF_UP);
-            }
+            // 计算下班后加班小时数
+            BigDecimal lateOvertimeHours = OvertimeCalculator.calculateLateOvertimeHours(
+                    returnTime, workEndTime);
 
             // 设置总加班小时数（用于显示）
             BigDecimal totalOvertimeHours = earlyOvertimeHours.add(lateOvertimeHours);
             record.setOvertimeHours(totalOvertimeHours);
 
             // 如果有加班时间，设置加班类型为平时加班
-            if (totalOvertimeHours.compareTo(BigDecimal.ZERO) > 0) {
+            if (totalOvertimeHours.compareTo(CalculationConstants.ZERO) > 0) {
                 if (record.getOvertimeType() == null) {
                     record.setOvertimeType(0); // 默认为平时加班
                 }
             }
+        } catch (OvertimeCalculationException e) {
+            log.error("计算加班小时数失败: recordId={}", record.getId(), e);
         } catch (Exception e) {
-            // 时间解析失败，不计算加班时间
-            System.err.println("解析工作时间失败: " + e.getMessage());
+            log.error("解析工作时间失败: recordId={}", record.getId(), e);
         }
     }
 
@@ -274,27 +258,10 @@ public class DispatchRecordServiceImpl extends ServiceImpl<DispatchRecordMapper,
      * 按照阶梯规则：<2小时0元，2-3小时40元，3-4小时60元，4-5小时80元，>=5小时100元
      * @param hours 加班小时数（向上取整）
      * @return 加班费
+     * @deprecated 使用 OvertimeCalculator.calculateOvertimeFeeByHours 替代
      */
+    @Deprecated
     private BigDecimal calculateOvertimeFeeByHours(BigDecimal hours) {
-        if (hours == null || hours.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
-        }
-
-        // 向上取整到整数小时
-        int hoursInt = hours.setScale(0, RoundingMode.UP).intValue();
-
-        // 按照阶梯规则计算加班费
-        if (hoursInt < 2) {
-            return BigDecimal.ZERO;
-        } else if (hoursInt >= 2 && hoursInt < 3) {
-            return new BigDecimal("40");
-        } else if (hoursInt >= 3 && hoursInt < 4) {
-            return new BigDecimal("60");
-        } else if (hoursInt >= 4 && hoursInt < 5) {
-            return new BigDecimal("80");
-        } else {
-            // >= 5小时
-            return new BigDecimal("100");
-        }
+        return OvertimeCalculator.calculateOvertimeFeeByHours(hours);
     }
 }
